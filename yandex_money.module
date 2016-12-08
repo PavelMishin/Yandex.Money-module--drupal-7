@@ -1,0 +1,155 @@
+<?php
+/**
+ * @file
+ * Module to make and track transactions to Yandex.Money Wallet
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function yandex_money_menu() {
+
+    //Submenu for custom module settings
+	$items['admin/config/custom'] = array(
+		'title' => 'Custom menu',
+		'position' => 'left',
+		'weight' => -100,
+		'page callback' => 'system_admin_menu_block_page',
+		'access arguments' => array('administer site configuration'),
+		'file' => 'system.admin.inc',
+		'file path' => drupal_get_path('module', 'system'),
+		);
+
+	//Module settings
+	$items['admin/config/custom/yandex_money'] = array(
+        'title' => t('Yandex.Money'),
+		'description' => 'Yandex.Money settings',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('yandex_money_config_form'),
+		'access arguments' => array('administer site configuration'),
+		'file' => 'yandex_money.admin.inc',
+		);
+
+	//Page for proccessing yandex return data
+	$items['receive'] = array(
+		'title' => 'get post',
+		'page callback' => 'yandex_money_check',
+		'access callback' => TRUE,
+		);
+
+	//Page whith Yandex.Money form
+    $items['yandex-money'] = array(
+        'title' => t('Yandex.Money'),
+        'description' => 'Yandex.Money form',
+        'menu_name' => 'main-menu',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('yandex_money_form'),
+        'access callback' => TRUE
+    );
+
+	return $items;
+}
+
+/**
+ * Proccessing yandex return data
+ */
+function yandex_money_check() {
+
+    // get personal secret from module settings, for verify page by yandex
+	$secret_key = variable_get('yandex_money_secret', '');
+
+    // Yandex verify
+	$sha1 = sha1( $_POST['notification_type'] . '&'. $_POST['operation_id']. '&' . $_POST['amount'] . '&643&' . $_POST['datetime'] . '&'. $_POST['sender'] . '&' . $_POST['codepro'] . '&' . $secret_key. '&' . $_POST['label']);
+
+	if ($sha1 != $_POST['sha1_hash'] ) {
+		exit();
+	}
+    if (isset($_POST['unaccepted']) && ($_POST['unaccepted'] == 'false')) { // if payment is OK
+
+        if (isset($_POST['label'])) {
+
+            $paidUser = user_load($_POST['label']); // load the user which has paid
+
+            $paidUser->field_payment_count['und'][0]['value'] += 1; // add payment count in special field for example
+
+            $edit = array();
+
+            user_save($paidUser, $edit);
+        }
+    }
+
+	exit();
+}
+
+/**
+ * Implements hook_form()
+ * Create form via Yandex.Money API https://money.yandex.ru/doc.xml?id=526991
+ */
+function yandex_money_form($form, &$form_state) {
+    global $user;
+    global $base_url;
+
+	$form['#action'] = 'https://money.yandex.ru/quickpay/confirm.xml';
+
+	$form['receiver'] = array(
+		'#type' => 'hidden',
+		'#value' => variable_get('yandex_money_wallet_number'),
+		);
+
+	$form['formcomment'] = array(
+		'#type' => 'hidden',
+		'#value' => t('Comment'),
+		);
+
+	$form['short-dest'] = array(
+		'#type' => 'hidden',
+		'#value' => t('Destination'),
+		);
+
+    //Field for process yandex return
+	$form['label'] = array(
+		'#type' => 'hidden',
+		'#value' => $user->uid,
+		);
+
+	$form['quickpay-form'] = array(
+		'#type' => 'hidden',
+		'#value' => 'small',
+		);
+
+	$form['targets'] = array(
+		'#type' => 'hidden',
+		'#value' => t('Target'),
+		);
+
+	$form['successURL'] = array(
+		'#type' => 'hidden',
+		'#value' => $base_url,
+		);
+
+	$form['sum'] = array(
+		'#type' => 'hidden',
+		'#value' => variable_get('yandex_money_sum', '120'),
+		'#data-type' => 'number',
+		);
+
+	 $form['submit-button1'] = array(
+	 	'#prefix' => '<button type="submit" name="paymentType" value="PC" title = "Yandex Wallet">',
+	 	'#suffix' => '</button>',
+         '#markup' => t('Buy'),
+     );
+
+	$form['submit-button2'] = array(
+		'#prefix' => '<button type="submit" name="paymentType" value="AC" title = "Card">',
+		'#suffix' => '</button>',
+        '#markup' => t('Buy'),
+    );
+
+	 $form['submit-button3'] = array(
+	 	'#prefix' => '<button type="submit" name="paymentType" value="MC" title = "Mobile">',
+	 	'#suffix' => '</button>',
+        '#markup' => t('Buy'),
+     );
+
+	return $form;
+}

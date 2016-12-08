@@ -1,0 +1,5 @@
+name = Yandex payment
+description = Remittance to the Yandex.Money wallet
+core = 7.x
+package = Custom
+configure = admin/config/yandex_money/config_form
